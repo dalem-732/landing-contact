@@ -1,0 +1,30 @@
+### Health check
+GET http://localhost:8000/api/health
+
+### Metrics
+GET http://localhost:8000/api/metrics
+
+### Public config (Turnstile)
+GET http://localhost:8000/api/config/public
+
+### Создать обращение (успех)
+POST http://localhost:8000/api/contact
+Content-Type: application/json
+
+{
+  "name": "Иван Петров",
+  "email": "ivan@example.com",
+  "phone": "+7 999 123-45-67",
+  "comment": "Здравствуйте! Хотел бы обсудить разработку backend-сервиса."
+}
+
+### Ошибка валидации (невалидный email и короткое имя)
+POST http://localhost:8000/api/contact
+Content-Type: application/json
+
+{
+  "name": "A",
+  "email": "not-an-email",
+  "phone": "123",
+  "comment": "hi"
+}

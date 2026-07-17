@@ -1,0 +1,63 @@
+{
+  "info": {
+    "name": "Landing Contact Service",
+    "description": "Коллекция запросов к backend-сервису формы обратной связи.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{base_url}}/api/health", "host": ["{{base_url}}"], "path": ["api", "health"] }
+      }
+    },
+    {
+      "name": "Metrics",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{base_url}}/api/metrics", "host": ["{{base_url}}"], "path": ["api", "metrics"] }
+      }
+    },
+    {
+      "name": "Public config",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{base_url}}/api/config/public", "host": ["{{base_url}}"], "path": ["api", "config", "public"] }
+      }
+    },
+    {
+      "name": "Contact - success",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Idempotency-Key", "value": "550e8400-e29b-41d4-a716-446655440000" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Иван Петров\",\n  \"email\": \"ivan@example.com\",\n  \"phone\": \"+7 999 123-45-67\",\n  \"comment\": \"Здравствуйте! Хотел бы обсудить разработку backend-сервиса.\"\n}"
+        },
+        "url": { "raw": "{{base_url}}/api/contact", "host": ["{{base_url}}"], "path": ["api", "contact"] }
+      }
+    },
+    {
+      "name": "Contact - validation error",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Idempotency-Key", "value": "550e8400-e29b-41d4-a716-446655440000" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"A\",\n  \"email\": \"not-an-email\",\n  \"phone\": \"123\",\n  \"comment\": \"hi\"\n}"
+        },
+        "url": { "raw": "{{base_url}}/api/contact", "host": ["{{base_url}}"], "path": ["api", "contact"] }
+      }
+    }
+  ]
+}

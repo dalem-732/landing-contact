@@ -1,0 +1,26 @@
+# Netlify: только статический лендинг (frontend/).
+# Backend (FastAPI + PostgreSQL + Redis) — Render/Railway, см. render.yaml / railway.toml.
+#
+# В Netlify Dashboard → Site settings → Environment variables:
+#   API_URL = https://your-backend.onrender.com
+
+[build]
+  publish = "frontend"
+  command = "bash scripts/netlify-build.sh"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  for = "/css/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/js/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
