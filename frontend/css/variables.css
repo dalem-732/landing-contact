@@ -1,0 +1,52 @@
+:root {
+  --color-bg: #f4f1ea;
+  --color-surface: #faf8f4;
+  --color-ink: #1c1b18;
+  --color-muted: #5c5952;
+  --color-accent: #c45c26;
+  --color-accent-hover: #a84d1f;
+  --color-border: #d9d4c8;
+  --color-border-strong: #b8b0a0;
+  --color-success: #2d6a4f;
+  --color-success-bg: #e8f3ec;
+  --color-error: #9b2335;
+  --color-error-bg: #fceef0;
+
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+
+  --font-size-h1: clamp(2rem, 5vw + 0.5rem, 3.25rem);
+  --font-size-h2: clamp(1.375rem, 2vw + 1rem, 1.75rem);
+  --font-size-h3: 1.0625rem;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+
+  --container-max: 72rem;
+  --page-nav-height: 4.75rem;
+  --hero-tag-line-height: calc(0.8125rem * 1.6);
+  --live-status-top: calc(var(--space-12) + var(--space-1));
+  --transition-base: 180ms ease;
+
+  --focus-ring: 0 0 0 3px rgba(196, 92, 38, 0.35);
+}
+
+html.page-nav-is-visible {
+  --live-status-top: calc(var(--page-nav-height) + var(--space-1));
+}
+
+@media (min-width: 48rem) {
+  :root {
+    --live-status-top: calc(var(--space-16) + var(--space-1));
+  }
+}

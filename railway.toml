@@ -1,0 +1,14 @@
+# Railway: https://docs.railway.app/guides/deploy
+# 1. New Project → Deploy from GitHub repo
+# 2. Add PostgreSQL (+ Redis для rate limit / email queue)
+# 3. Web service (landing-contact): DATABASE_URL=${{Postgres.DATABASE_URL}}
+# 4. Worker service (landing-worker): те же DATABASE_URL + REDIS_URL
+#    Роль worker определяется автоматически по RAILWAY_SERVICE_NAME (имя содержит "worker")
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# Без healthcheckPath — один railway.toml на web и worker; worker (arq) не отдаёт HTTP.
+restartPolicyType = "ON_FAILURE"

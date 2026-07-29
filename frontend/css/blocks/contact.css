@@ -1,0 +1,96 @@
+.contact {
+  padding-block: var(--space-8);
+}
+
+.contact__grid {
+  display: grid;
+  gap: var(--space-10);
+}
+
+.contact__header {
+  margin-bottom: var(--space-6);
+}
+
+.contact__title {
+  margin-bottom: var(--space-2);
+}
+
+.contact__subtitle {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--color-muted);
+}
+
+.contact__aside {
+  padding: var(--space-6);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  align-self: start;
+}
+
+.contact__aside-title {
+  margin-bottom: var(--space-5);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.contact__steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-4);
+  counter-reset: step;
+}
+
+.contact__step {
+  position: relative;
+  padding-left: var(--space-8);
+  font-size: 0.9375rem;
+  color: var(--color-muted);
+  counter-increment: step;
+}
+
+.contact__step::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0.1em;
+  width: 1.375rem;
+  height: 1.375rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--color-accent);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 50%;
+  transition:
+    background-color var(--transition-base),
+    color var(--transition-base),
+    border-color var(--transition-base);
+}
+
+.contact__step--active {
+  color: var(--color-ink);
+  font-weight: 500;
+}
+
+.contact__step--active::before {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+
+@media (min-width: 64rem) {
+  .contact__grid {
+    grid-template-columns: 1fr minmax(16rem, 20rem);
+    gap: var(--space-12);
+    align-items: start;
+  }
+}

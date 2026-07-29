@@ -1,0 +1,208 @@
+.contact-form__fieldset {
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
+}
+
+.contact-form__row {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.contact-form__group {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.contact-form__group--filled .contact-form__label {
+  color: var(--color-accent);
+}
+
+.contact-form__label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.contact-form__counter {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.contact-form__counter--warn {
+  color: var(--color-error);
+  font-weight: 600;
+}
+
+.contact-form__progress {
+  height: 3px;
+  margin-bottom: var(--space-6);
+  background: var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.contact-form__progress-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--color-accent);
+  border-radius: var(--radius-sm);
+  transition: width var(--transition-base);
+}
+
+.contact-form__label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-ink);
+}
+
+.contact-form__input {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  color: var(--color-ink);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.contact-form__input--textarea {
+  min-height: 8rem;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.contact-form__input::placeholder {
+  color: var(--color-muted);
+  opacity: 0.7;
+}
+
+.contact-form__input:hover {
+  border-color: var(--color-muted);
+}
+
+.contact-form__input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: var(--focus-ring);
+}
+
+.contact-form__input:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: var(--focus-ring);
+}
+
+.contact-form__input--error {
+  border-color: var(--color-error);
+}
+
+.contact-form__input--error:focus {
+  box-shadow: 0 0 0 3px rgba(155, 35, 53, 0.25);
+}
+
+.contact-form__error {
+  margin: 0;
+  min-height: 1.25rem;
+  font-size: 0.8125rem;
+  color: var(--color-error);
+}
+
+.contact-form__error:empty {
+  min-height: 0;
+}
+
+.contact-form__captcha {
+  margin-top: var(--space-2);
+}
+
+.contact-form__actions {
+  margin-top: var(--space-6);
+}
+
+.contact-form__submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  min-height: 2.75rem;
+  min-width: 11rem;
+  padding: var(--space-3) var(--space-8);
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--color-accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-base),
+    transform var(--transition-base),
+    box-shadow var(--transition-base);
+}
+
+.contact-form__submit-icon {
+  display: none;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+}
+
+.contact-form__submit--loading .contact-form__submit-icon {
+  display: block;
+}
+
+.contact-form__submit-icon--spin {
+  animation: contact-form-spin 0.7s linear infinite;
+}
+
+@keyframes contact-form-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.contact-form__submit:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(196, 92, 38, 0.25);
+}
+
+.contact-form__submit:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.contact-form__submit:disabled,
+.contact-form__submit--loading {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+@media (min-width: 48rem) {
+  .contact-form__row {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .contact-form__submit:hover:not(:disabled) {
+    transform: none;
+  }
+
+  .contact-form__submit-icon--spin {
+    animation: none;
+  }
+}
