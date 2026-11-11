@@ -1,4 +1,4 @@
-"""Health probes для AI, SMTP, PostgreSQL и Redis."""
+"""Health probes для AI, email (Resend → SMTP → лог), PostgreSQL и Redis."""
 from __future__ import annotations
 
 import asyncio
@@ -44,7 +44,8 @@ class HealthService:
 
     def _check_smtp(self) -> dict:
         if self.settings.resend_configured:
-            return {"status": "ok", "detail": "provider=resend"}
+            fallback = "smtp" if self.settings.smtp_configured else "log"
+            return {"status": "ok", "detail": f"provider=resend; fallback={fallback}"}
         if not self.settings.smtp_configured:
             return {"status": "ok", "detail": "not configured (fallback mode)"}
         try:

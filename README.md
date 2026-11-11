@@ -99,8 +99,8 @@ docker compose up --build
 | `DATABASE_URL` | PostgreSQL connection string (asyncpg) | см. `.env.example` |
 | `DB_POOL_SIZE` / `DB_ECHO` | Пул соединений / SQL-лог SQLAlchemy | `5` / `false` |
 | `REDIS_URL` | Redis для rate limit + ARQ email queue | — |
-| `RESEND_API_KEY` | Resend HTTP API (приоритет над SMTP) | — |
-| `SMTP_HOST` / `SMTP_PORT` | SMTP fallback (пусто → только лог, если нет Resend) | — / `587` |
+| `RESEND_API_KEY` | Resend HTTP API, пробуется первым | — |
+| `SMTP_HOST` / `SMTP_PORT` | SMTP, если Resend не задан или его вызов не удался (пусто → лог `[EMAIL:FALLBACK]`) | — / `587` |
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | Учётные данные SMTP | — |
 | `SMTP_USE_TLS` | Использовать STARTTLS | `true` |
 | `SMTP_FROM` | Отправитель (для Resend — verified domain или `onboarding@resend.dev`) | — |
@@ -114,7 +114,8 @@ docker compose up --build
 | `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile CAPTCHA | — |
 
 > Сервис работает даже без AI-ключа и без email: включается graceful fallback.
-> Письма: **Resend** (если задан `RESEND_API_KEY`) → иначе **SMTP** → иначе лог.
+> Письма: **Resend** (если задан `RESEND_API_KEY`) → при ошибке (исключение, таймаут, не-2xx) **SMTP** (если задан `SMTP_HOST`) → иначе лог `[EMAIL:FALLBACK]`.
+> Временные сбои (сеть, таймаут, HTTP 5xx, 429 и 409) повторяются до 3 раз с паузой; прочие HTTP 4xx (например неверный ключ) не повторяются. Письмо, уже отмеченное в БД как доставленное, при повторе задачи не отправляется снова.
 > На Railway секреты задавайте в Variables сервиса, не в Git.
 
 ---
@@ -165,7 +166,7 @@ app/
 ├─ services/                # Бизнес-логика
 │  ├─ contact_service.py    # оркестрация полного цикла
 │  ├─ ai_service.py         # AI + fallback
-│  ├─ email_service.py      # Resend / SMTP + HTML + fallback
+│  ├─ email_service.py      # Resend → SMTP → лог, retry временных ошибок
 │  ├─ email_templates.py    # plain + HTML тела писем
 │  └─ prompts.py            # промпты AI
 ├─ repositories/            # Доступ к данным (PostgreSQL / Redis)
@@ -264,7 +265,11 @@ flowchart LR
 Email отправляется асинхронно (BackgroundTasks или ARQ worker). В ответе API
 `email_*_sent` остаются `null` при `email_queued: true` (отправка ещё в очереди);
 фактический статус пишется в БД (`email_owner_sent` / `email_user_sent`) и
-учитывается в `/api/metrics`.
+учитывается в `/api/metrics`. Повтор внутри одной отправки делает сервис
+(до 3 попыток на канал) с одним и тем же `Idempotency-Key` Resend
+(`contact/<request_id>/owner` и `.../user`): таймаут после фактической
+отправки не создаёт второе письмо. Если задача выполняется снова, получатель
+с флагом `true` пропускается.
 
 Клиенту уходит HTML+plain письмо с AI `auto_reply`; владельцу - карточка обращения
 и черновик ответа.
@@ -277,7 +282,8 @@ OWNER_EMAIL=you@example.com
 ```
 Для продакшена замените `onboarding@resend.dev` на адрес с верифицированным доменом в Resend.
 После деплоя примените миграции (`alembic upgrade head`) и проверьте `/api/health`
-(`email_configured: true`, `checks.smtp.detail` ≈ `provider=resend`).
+(`email_configured: true`, `checks.smtp.detail` = `provider=resend; fallback=log`,
+либо `fallback=smtp`, если задан `SMTP_HOST`).
 
 Ошибка валидации - `422`:
 ```json
@@ -371,6 +377,8 @@ CAPTCHA failed - `400`:
 ```
 
 При недоступности зависимостей - `"status": "degraded"`, проблемный check с `"status": "error"`.
+
+Если задан `RESEND_API_KEY`, проверка `checks.smtp` остаётся `ok`, а `detail` описывает цепочку: `provider=resend; fallback=smtp` или `provider=resend; fallback=log`.
 
 ### `GET /api/metrics`
 Агрегированная статистика из PostgreSQL.

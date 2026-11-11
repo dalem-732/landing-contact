@@ -94,7 +94,7 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str | None = None
 
-    # Email (Resend preferred, SMTP fallback)
+    # Email (Resend, при ошибке SMTP, иначе лог)
     resend_api_key: str | None = None
     smtp_host: str | None = None
     smtp_port: int = 587

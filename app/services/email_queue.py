@@ -20,19 +20,64 @@ async def send_and_record(
     analysis: AIAnalysis,
     request_id: str | None = None,
 ) -> tuple[bool, bool]:
-    """Отправка + запись email_owner_sent / email_user_sent в БД."""
+    """Отправка + запись email_owner_sent / email_user_sent в БД.
+
+    Получатель с уже сохранённым ``True`` пропускается: повтор задачи ARQ
+    не отправляет письмо, которое уже ушло. Флаг пишется сразу после каждой
+    попытки, чтобы сбой на втором письме не стирал успех первого.
+    """
     from app.repositories.contact_repository import contact_repository
     from app.services.email_service import email_service
 
-    owner_sent, user_sent = email_service.send_notifications_sync(request, analysis)
+    skip_owner = False
+    skip_user = False
     if request_id:
-        await contact_repository.update(
-            request_id,
-            {
-                "email_owner_sent": owner_sent,
-                "email_user_sent": user_sent,
-            },
+        existing = await contact_repository.get_email_flags(request_id)
+        if existing is not None:
+            skip_owner = existing[0] is True
+            skip_user = existing[1] is True
+
+    if skip_owner and skip_user:
+        return True, True
+
+    if (
+        not email_service.settings.email_configured
+        and not skip_owner
+        and not skip_user
+    ):
+        owner_sent, user_sent = email_service.send_notifications_sync(request, analysis)
+        if request_id:
+            await contact_repository.update(
+                request_id,
+                {
+                    "email_owner_sent": owner_sent,
+                    "email_user_sent": user_sent,
+                },
+            )
+        return owner_sent, user_sent
+
+    owner_sent = True
+    user_sent = True
+    # Стабильный ключ на заявку и получателя: повтор задачи не дублирует письмо,
+    # которое Resend уже принял (таймаут клиента после фактической отправки).
+    owner_key = f"contact/{request_id}/owner" if request_id else None
+    user_key = f"contact/{request_id}/user" if request_id else None
+    if not skip_owner:
+        owner_sent = email_service.send_owner_notification(
+            request, analysis, idempotency_key=owner_key
         )
+        if request_id:
+            await contact_repository.update(
+                request_id, {"email_owner_sent": owner_sent}
+            )
+    if not skip_user:
+        user_sent = email_service.send_user_notification(
+            request, analysis, idempotency_key=user_key
+        )
+        if request_id:
+            await contact_repository.update(
+                request_id, {"email_user_sent": user_sent}
+            )
     return owner_sent, user_sent
 
 

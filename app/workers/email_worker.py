@@ -1,4 +1,9 @@
-"""ARQ worker для отправки email."""
+"""ARQ worker для отправки email.
+
+Повторы временных ошибок — в EmailService, отдельно на каждое письмо.
+``max_tries`` только на случай падения процесса: письмо с ``email_*_sent=True``
+повторно не отправляется.
+"""
 from __future__ import annotations
 
 import os
@@ -55,6 +60,9 @@ def create_worker_settings():
         {
             "functions": [send_contact_emails],
             "redis_settings": _build_redis_settings(),
+            # Доставка уже повторяется внутри EmailService. Здесь — повтор задачи,
+            # если процесс умер до записи флагов; успешный получатель не дублируется.
+            "max_tries": 3,
         },
     )
 
