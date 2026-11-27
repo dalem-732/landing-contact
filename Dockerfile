@@ -8,9 +8,18 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY app ./app
+COPY alembic ./alembic
+COPY alembic.ini entrypoint.sh ./
+COPY scripts/healthcheck.sh ./scripts/healthcheck.sh
+COPY frontend ./frontend
 
-RUN mkdir -p data logs && chmod +x entrypoint.sh scripts/healthcheck.sh
+RUN mkdir -p data logs \
+    && chmod +x entrypoint.sh scripts/healthcheck.sh \
+    && adduser --disabled-password --gecos "" --uid 10001 appuser \
+    && chown -R appuser:appuser /app
+
+USER appuser
 
 EXPOSE 8000
 

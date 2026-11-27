@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/css/main.css?v=9" />
+  <link rel="stylesheet" href="/static/css/main.css?v=10" />
 </head>
 <body class="page">
   <nav class="page-nav" id="page-nav" aria-label="Навигация по странице">
@@ -189,7 +189,6 @@
           Health
           <span class="site-footer__badge" id="footer-health-badge" hidden></span>
         </a>
-        <a class="site-footer__link" href="/api/metrics">Metrics</a>
       </nav>
       <p class="site-footer__copy">FastAPI · PostgreSQL · Redis</p>
     </div>
@@ -209,20 +208,7 @@
       <span class="live-status__chevron" aria-hidden="true"></span>
     </button>
     <div class="live-status__body" id="live-status-body">
-      <dl class="live-status__list">
-        <div class="live-status__item">
-          <dt class="live-status__term">PostgreSQL</dt>
-          <dd class="live-status__value" id="live-status-pg">-</dd>
-        </div>
-        <div class="live-status__item">
-          <dt class="live-status__term">Redis</dt>
-          <dd class="live-status__value" id="live-status-redis">-</dd>
-        </div>
-        <div class="live-status__item">
-          <dt class="live-status__term">Обращений</dt>
-          <dd class="live-status__value" id="live-status-requests">-</dd>
-        </div>
-      </dl>
+      <p class="live-status__hint">Краткий статус сервиса. Подробные проверки доступны только с токеном.</p>
     </div>
   </div>
 

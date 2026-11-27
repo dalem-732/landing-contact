@@ -19,7 +19,7 @@ class RateLimitResult:
 
 
 class RateLimitBackend:
-    def check(self, key: str, *, max_requests: int, window_seconds: int) -> RateLimitResult:
+    async def check(self, key: str, *, max_requests: int, window_seconds: int) -> RateLimitResult:
         raise NotImplementedError
 
 
@@ -28,7 +28,7 @@ class FileRateLimitBackend(RateLimitBackend):
         from app.repositories.rate_limit_repository import RateLimitRepository
         self._repo = RateLimitRepository()
 
-    def check(self, key: str, *, max_requests: int, window_seconds: int) -> RateLimitResult:
+    async def check(self, key: str, *, max_requests: int, window_seconds: int) -> RateLimitResult:
         allowed, remaining, retry_after = self._repo.check(
             key, max_requests=max_requests, window_seconds=window_seconds
         )
@@ -47,11 +47,11 @@ class RedisRateLimitBackend(RateLimitBackend):
 
     def _get_client(self):
         if self._client is None:
-            import redis
+            import redis.asyncio as redis
             self._client = redis.from_url(self._redis_url, decode_responses=True)
         return self._client
 
-    def check(self, key: str, *, max_requests: int, window_seconds: int) -> RateLimitResult:
+    async def check(self, key: str, *, max_requests: int, window_seconds: int) -> RateLimitResult:
         import time
         client = self._get_client()
         now = time.time()
@@ -61,11 +61,11 @@ class RedisRateLimitBackend(RateLimitBackend):
         pipe.zadd(pipe_key, {str(now): now})
         pipe.zcard(pipe_key)
         pipe.expire(pipe_key, window_seconds + 1)
-        _, _, count, _ = pipe.execute()
+        _, _, count, _ = await pipe.execute()
         if count > max_requests:
-            oldest = client.zrange(pipe_key, 0, 0, withscores=True)
+            oldest = await client.zrange(pipe_key, 0, 0, withscores=True)
             retry_after = int(window_seconds - (now - oldest[0][1])) + 1 if oldest else window_seconds
-            client.zrem(pipe_key, str(now))
+            await client.zrem(pipe_key, str(now))
             return RateLimitResult(False, max_requests, 0, max(retry_after, 1))
         return RateLimitResult(True, max_requests, max_requests - count)
 
@@ -83,11 +83,11 @@ class RateLimitService:
     def __init__(self, backend: RateLimitBackend | None = None):
         self._backend_override = backend
 
-    def check(self, client_ip: str, email: str) -> RateLimitResult:
+    async def check(self, client_ip: str, email: str) -> RateLimitResult:
         settings = get_settings()
         backend = self._backend_override or _resolve_backend(settings)
 
-        ip_result = backend.check(
+        ip_result = await backend.check(
             f"ip:{client_ip}",
             max_requests=settings.rate_limit_max_requests,
             window_seconds=settings.rate_limit_window_seconds,
@@ -95,7 +95,7 @@ class RateLimitService:
         if not ip_result.allowed:
             raise RateLimitExceeded(retry_after=ip_result.retry_after, limit=ip_result.limit)
 
-        email_result = backend.check(
+        email_result = await backend.check(
             f"email:{email.lower()}",
             max_requests=settings.rate_limit_email_max,
             window_seconds=settings.rate_limit_email_window,

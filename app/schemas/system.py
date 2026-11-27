@@ -6,6 +6,12 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+class PublicHealthResponse(BaseModel):
+    status: str = Field(examples=["ok", "degraded"])
+    version: str
+    time: datetime
+
+
 class HealthCheckDetail(BaseModel):
     status: str
     detail: str

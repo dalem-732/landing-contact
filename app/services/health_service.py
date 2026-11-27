@@ -14,9 +14,19 @@ from app.db.session import get_engine
 logger = get_logger("app.health")
 
 
+def _safe_error_detail() -> str:
+    return "unavailable"
+
+
 class HealthService:
     def __init__(self, settings: Settings | None = None):
         self.settings = settings or get_settings()
+
+    async def public_status(self) -> str:
+        postgres = await self._check_postgres()
+        if postgres["status"] == "error":
+            return "degraded"
+        return "ok"
 
     async def run_checks(self) -> dict:
         ai, smtp, postgres, redis_check = await asyncio.gather(
@@ -29,8 +39,6 @@ class HealthService:
         statuses = [c["status"] for c in checks.values()]
         if all(s == "ok" for s in statuses):
             overall = "ok"
-        elif any(s == "error" for s in statuses):
-            overall = "degraded"
         else:
             overall = "degraded"
         return {"status": overall, "checks": checks}
@@ -44,7 +52,8 @@ class HealthService:
 
     def _check_smtp(self) -> dict:
         if self.settings.resend_configured:
-            return {"status": "ok", "detail": "provider=resend"}
+            fallback = "smtp" if self.settings.smtp_configured else "log"
+            return {"status": "ok", "detail": f"provider=resend; fallback={fallback}"}
         if not self.settings.smtp_configured:
             return {"status": "ok", "detail": "not configured (fallback mode)"}
         try:
@@ -54,8 +63,9 @@ class HealthService:
                 if self.settings.smtp_use_tls:
                     server.starttls()
             return {"status": "ok", "detail": "provider=smtp; connection successful"}
-        except Exception as exc:
-            return {"status": "error", "detail": str(exc)}
+        except Exception:
+            logger.warning("SMTP health check failed", exc_info=True)
+            return {"status": "error", "detail": _safe_error_detail()}
 
     async def _check_postgres(self) -> dict:
         try:
@@ -63,8 +73,9 @@ class HealthService:
             async with engine.connect() as conn:
                 await conn.execute(text("SELECT 1"))
             return {"status": "ok", "detail": "connection successful"}
-        except Exception as exc:
-            return {"status": "error", "detail": str(exc)}
+        except Exception:
+            logger.warning("Postgres health check failed", exc_info=True)
+            return {"status": "error", "detail": _safe_error_detail()}
 
     async def _check_redis(self) -> dict:
         if not self.settings.redis_url:
@@ -75,8 +86,9 @@ class HealthService:
             await client.ping()
             await client.aclose()
             return {"status": "ok", "detail": "ping ok"}
-        except Exception as exc:
-            return {"status": "error", "detail": str(exc)}
+        except Exception:
+            logger.warning("Redis health check failed", exc_info=True)
+            return {"status": "error", "detail": _safe_error_detail()}
 
 
 health_service = HealthService()

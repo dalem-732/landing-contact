@@ -18,7 +18,20 @@ AppEnv = Literal["development", "staging", "production"]
 ServiceRole = Literal["web", "worker"]
 
 CORS_ALLOWED_METHODS = ["GET", "POST", "OPTIONS"]
-CORS_ALLOWED_HEADERS = ["Content-Type", "Idempotency-Key", "Authorization"]
+CORS_ALLOWED_HEADERS = [
+    "Content-Type",
+    "Idempotency-Key",
+    "Authorization",
+    "X-Metrics-Token",
+]
+
+_RAILWAY_MARKERS = (
+    "RAILWAY_ENVIRONMENT_ID",
+    "RAILWAY_PROJECT_ID",
+    "RAILWAY_SERVICE_ID",
+    "RAILWAY_ENVIRONMENT",
+)
+_RENDER_MARKERS = ("RENDER", "RENDER_SERVICE_ID", "RENDER_INSTANCE_ID")
 
 
 def resolve_redis_url() -> str | None:
@@ -52,6 +65,24 @@ def redis_env_diagnostic() -> str:
     return ", ".join(parts)
 
 
+def _env_flag(name: str) -> bool | None:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        return None
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+def running_behind_platform_proxy() -> bool:
+    return any(os.environ.get(name) for name in _RAILWAY_MARKERS + _RENDER_MARKERS)
+
+
+def trust_proxy_headers() -> bool:
+    configured = _env_flag("TRUST_PROXY_HEADERS")
+    if configured is not None:
+        return configured
+    return running_behind_platform_proxy()
+
+
 class Settings(BaseSettings):
     """Все настройки сервиса. Значения читаются из .env / окружения."""
 
@@ -62,39 +93,32 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    # Общие
     app_name: str = "Landing Contact Service"
     app_env: AppEnv = "development"
     service_role: ServiceRole = "web"
-    debug: bool = True
-    log_format: str = "text"  # text | json
+    debug: bool = False
+    log_format: str = "text"
     log_level: str = "INFO"
 
-    # CORS
     cors_origins: str = "*"
     cors_allow_credentials: bool = True
 
-    # Trusted proxy (comma-separated IPs)
     trusted_proxy_ips: str = ""
+    trust_proxy_headers: bool | None = None
 
-    # Rate limiting — IP
-    rate_limit_max_requests: int = 5
+    rate_limit_max_requests: int = 3
     rate_limit_window_seconds: int = 60
-    rate_limit_email_max: int = 3
+    rate_limit_email_max: int = 2
     rate_limit_email_window: int = 3600
 
-    # Validation
     default_phone_region: str = "RU"
 
-    # PostgreSQL
     database_url: str = "postgresql+asyncpg://landing:landing@localhost:5432/landing"
     db_pool_size: int = 5
     db_echo: bool = False
 
-    # Redis
     redis_url: str | None = None
 
-    # Email (Resend preferred, SMTP fallback)
     resend_api_key: str | None = None
     smtp_host: str | None = None
     smtp_port: int = 587
@@ -104,7 +128,6 @@ class Settings(BaseSettings):
     smtp_from: str = "Landing Bot <no-reply@example.com>"
     owner_email: str = "owner@example.com"
 
-    # AI
     ai_provider: str = "openai"
     ai_timeout_seconds: int = 15
     ai_circuit_failure_threshold: int = 3
@@ -114,11 +137,11 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-haiku-4-5"
 
-    # Turnstile CAPTCHA
     turnstile_site_key: str | None = None
     turnstile_secret_key: str | None = None
 
-    # Пути (не из env)
+    metrics_token: str | None = None
+
     base_dir: Path = Field(default=BASE_DIR, exclude=True)
     data_dir: Path = Field(default=DATA_DIR, exclude=True)
     logs_dir: Path = Field(default=LOGS_DIR, exclude=True)
@@ -126,7 +149,6 @@ class Settings(BaseSettings):
     @field_validator("database_url", mode="before")
     @classmethod
     def _normalize_database_url(cls, value):
-        """Render/Railway отдают postgresql:// — SQLAlchemy async требует asyncpg."""
         if isinstance(value, str) and value.startswith("postgresql://"):
             return value.replace("postgresql://", "postgresql+asyncpg://", 1)
         return value
@@ -143,6 +165,7 @@ class Settings(BaseSettings):
         "smtp_host", "smtp_username", "smtp_password",
         "openai_api_key", "anthropic_api_key",
         "turnstile_site_key", "turnstile_secret_key",
+        "metrics_token",
         mode="before",
     )
     @classmethod
@@ -168,14 +191,13 @@ class Settings(BaseSettings):
     def validate_production(self) -> Settings:
         if self.app_env == "production":
             if self.service_role != "worker" and self.cors_origins.strip() == "*":
-                railway_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
-                if railway_domain:
-                    self.cors_origins = f"https://{railway_domain}"
-
-            if self.service_role != "worker" and self.cors_origins.strip() == "*":
                 raise ValueError("CORS_ORIGINS must not be '*' in production")
             if not self.database_url.strip():
                 raise ValueError("DATABASE_URL is required in production")
+            if self.service_role != "worker" and not self.turnstile_secret_key:
+                raise ValueError("TURNSTILE_SECRET_KEY is required in production")
+            if self.service_role != "worker" and not self.metrics_token:
+                raise ValueError("METRICS_TOKEN is required in production")
         return self
 
     @property
@@ -191,7 +213,6 @@ class Settings(BaseSettings):
 
     @property
     def effective_cors_credentials(self) -> bool:
-        """CORS spec forbids credentials with wildcard origin."""
         if self.cors_is_wildcard:
             return False
         return self.cors_allow_credentials
@@ -202,6 +223,14 @@ class Settings(BaseSettings):
         if not raw:
             return []
         return [ip.strip() for ip in raw.split(",") if ip.strip()]
+
+    @property
+    def effective_trust_proxy(self) -> bool:
+        if self.trusted_proxy_list:
+            return True
+        if self.trust_proxy_headers is not None:
+            return self.trust_proxy_headers
+        return trust_proxy_headers()
 
     @property
     def smtp_configured(self) -> bool:
@@ -233,7 +262,6 @@ class Settings(BaseSettings):
 
     @property
     def masked_database_url(self) -> str:
-        """DATABASE_URL без пароля — безопасно для логов."""
         try:
             parsed = urlparse(self.database_url)
             if parsed.password:

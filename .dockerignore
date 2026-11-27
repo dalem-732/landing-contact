@@ -8,5 +8,9 @@ data/*.jsonl
 logs/*.log
 .pytest_cache/
 .git/
+.github/
 .idea/
 .vscode/
+tests/
+requirements-dev.txt
+*.md

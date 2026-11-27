@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, select
 
+from app.core.exceptions import IdempotencyConflict
 from app.core.logging import get_logger
 from app.db.models.idempotency_key import IdempotencyKeyModel
 from app.db.session import get_session_factory
@@ -34,13 +35,14 @@ class IdempotencyRepository:
             result = await session.execute(
                 select(IdempotencyKeyModel).where(
                     IdempotencyKeyModel.key == key,
-                    IdempotencyKeyModel.body_hash == body_hash,
                     IdempotencyKeyModel.expires_at > now,
                 )
             )
             row = result.scalar_one_or_none()
             if row is None:
                 return None
+            if row.body_hash != body_hash:
+                raise IdempotencyConflict()
             return row.response
 
     async def put(self, key: str, body_hash: str, response: dict) -> None:
@@ -50,6 +52,11 @@ class IdempotencyRepository:
             await self._purge_expired(session)
             existing = await session.get(IdempotencyKeyModel, key)
             if existing:
+                if existing.expires_at > now and existing.body_hash != body_hash:
+                    raise IdempotencyConflict()
+                if existing.expires_at > now and existing.body_hash == body_hash:
+                    await session.commit()
+                    return
                 existing.body_hash = body_hash
                 existing.response = response
                 existing.expires_at = expires

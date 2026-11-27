@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from app.core.circuit_breaker import ai_circuit_breaker
 from app.core.config import Settings, get_settings
@@ -31,6 +32,24 @@ _JOB_WORDS = {"вакансия", "работа", "оффер", "зарплат�
 _PROJECT_WORDS = {"проект", "сайт", "приложение", "разработ", "project", "app", "website", "build"}
 _COLLAB_WORDS = {"сотрудничество", "партн", "collaborat", "partnership"}
 
+_TAG_RE = re.compile(r"<[^>]*>")
+_URL_RE = re.compile(r"(https?://|www\.)\S+", re.IGNORECASE)
+_DEFAULT_REPLY = "Спасибо за обращение, мы скоро свяжемся с вами."
+
+
+def sanitize_auto_reply(text: str, fallback: str = _DEFAULT_REPLY) -> str:
+    cleaned = _TAG_RE.sub("", text or "")
+    cleaned = _URL_RE.sub("", cleaned)
+    cleaned = " ".join(cleaned.split()).strip()[:400]
+    return cleaned or fallback
+
+
+def _fallback_reply(name: str) -> str:
+    return (
+        f"Здравствуйте, {name}! Спасибо за ваше обращение. "
+        "Я получил ваше сообщение и свяжусь с вами в ближайшее время."
+    )
+
 
 class AIService:
     def __init__(self, settings: Settings | None = None):
@@ -46,7 +65,7 @@ class AIService:
             try:
                 data = await self._call_provider(request)
                 ai_circuit_breaker.record_success()
-                return self._build(data, ai_used=True, provider=self.settings.ai_provider)
+                return self._build(data, ai_used=True, provider=self.settings.ai_provider, request=request)
             except Exception as exc:
                 ai_circuit_breaker.record_failure()
                 logger.warning("AI provider failed (%s), using fallback: %s",
@@ -111,13 +130,13 @@ class AIService:
             raw = raw[start:end + 1]
         return json.loads(raw)
 
-    def _build(self, data: dict, *, ai_used: bool, provider: str | None) -> AIAnalysis:
+    def _build(self, data: dict, *, ai_used: bool, provider: str | None, request: ContactRequest) -> AIAnalysis:
+        fallback = _fallback_reply(request.name)
         return AIAnalysis(
             sentiment=self._coerce(data.get("sentiment"), Sentiment, Sentiment.neutral),
             category=self._coerce(data.get("category"), RequestCategory, RequestCategory.other),
             summary=(data.get("summary") or "").strip()[:300] or "Без резюме",
-            auto_reply=(data.get("auto_reply") or "").strip()[:1500]
-                       or "Спасибо за обращение, мы скоро свяжемся с вами.",
+            auto_reply=sanitize_auto_reply(data.get("auto_reply") or "", fallback),
             ai_used=ai_used,
             provider=provider,
         )
@@ -150,10 +169,7 @@ class AIService:
             category = RequestCategory.other
 
         summary = request.comment.strip().split("\n")[0][:120]
-        auto_reply = (
-            f"Здравствуйте, {request.name}! Спасибо за ваше обращение. "
-            "Я получил ваше сообщение и свяжусь с вами в ближайшее время."
-        )
+        auto_reply = sanitize_auto_reply(_fallback_reply(request.name))
 
         return AIAnalysis(
             sentiment=sentiment,

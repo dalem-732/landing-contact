@@ -1,11 +1,12 @@
 """Оркестрация полного цикла обработки обращения."""
 from __future__ import annotations
 
+import re
 import uuid
 
 from fastapi import BackgroundTasks
 
-from app.core.exceptions import CaptchaFailed
+from app.core.exceptions import CaptchaFailed, InvalidIdempotencyKey
 from app.core.logging import get_logger
 from app.repositories.contact_repository import contact_repository
 from app.repositories.idempotency_repository import idempotency_repository
@@ -21,6 +22,19 @@ from app.services.email_queue import email_queue_service
 from app.services.rate_limit_service import rate_limit_service
 
 logger = get_logger("app.service.contact")
+
+_IDEMPOTENCY_KEY_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
+
+def validate_idempotency_key(key: str | None) -> str | None:
+    if key is None:
+        return None
+    cleaned = key.strip()
+    if not cleaned:
+        return None
+    if not _IDEMPOTENCY_KEY_RE.fullmatch(cleaned):
+        raise InvalidIdempotencyKey()
+    return cleaned
 
 
 class ContactService:
@@ -60,19 +74,20 @@ class ContactService:
                 rate_limit_remaining=0,
             )
 
+        key = validate_idempotency_key(idempotency_key)
         payload_for_hash = request.model_dump(exclude={"website", "captcha_token"})
         body_hash = self.idempotency.body_hash(payload_for_hash)
-        if idempotency_key:
-            cached = await self.idempotency.get(idempotency_key, body_hash)
+        if key:
+            cached = await self.idempotency.get(key, body_hash)
             if cached:
-                logger.info("Idempotency hit for key %s", idempotency_key)
+                logger.info("Idempotency hit for key %s", key)
                 return ContactHandleResult(
                     response=ContactResponse.model_validate(cached),
                     rate_limit_limit=0,
                     rate_limit_remaining=0,
                 )
 
-        rl = self.rate_limiter.check(client_ip, str(request.email))
+        rl = await self.rate_limiter.check(client_ip, str(request.email))
 
         if not await self.captcha.verify(request.captcha_token, client_ip):
             raise CaptchaFailed()
@@ -118,9 +133,9 @@ class ContactService:
             email_queued=email_queued,
         )
 
-        if idempotency_key:
+        if key:
             await self.idempotency.put(
-                idempotency_key, body_hash, response.model_dump(mode="json")
+                key, body_hash, response.model_dump(mode="json")
             )
 
         return ContactHandleResult(
