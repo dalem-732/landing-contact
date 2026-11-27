@@ -16,6 +16,7 @@ from app.core.exceptions import register_exception_handlers
 from app.core.logging import get_logger, setup_logging
 from app.db.session import close_db, init_db
 from app.middleware.request_logging import RequestLoggingMiddleware
+from app.middleware.security_headers import SecurityHeadersMiddleware
 
 setup_logging()
 logger = get_logger("app.main")
@@ -65,6 +66,7 @@ app = FastAPI(
     ],
 )
 
+app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -72,7 +74,7 @@ app.add_middleware(
     allow_methods=CORS_ALLOWED_METHODS,
     allow_headers=CORS_ALLOWED_HEADERS,
 )
-app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 register_exception_handlers(app)
 

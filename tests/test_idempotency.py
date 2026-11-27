@@ -1,6 +1,7 @@
 """Тесты idempotency repository."""
 import pytest
 
+from app.core.exceptions import IdempotencyConflict
 from app.repositories.idempotency_repository import IdempotencyRepository
 
 
@@ -15,9 +16,10 @@ async def test_idempotency_store_and_retrieve():
 
 
 @pytest.mark.asyncio
-async def test_idempotency_different_body():
+async def test_idempotency_different_body_conflicts():
     repo = IdempotencyRepository()
     h1 = repo.body_hash({"a": 1})
     h2 = repo.body_hash({"a": 2})
     await repo.put("key1", h1, {"request_id": "abc"})
-    assert await repo.get("key1", h2) is None
+    with pytest.raises(IdempotencyConflict):
+        await repo.get("key1", h2)
