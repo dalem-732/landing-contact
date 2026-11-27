@@ -20,16 +20,6 @@ function statusClass(status) {
   return "warn";
 }
 
-function formatCheck(status) {
-  if (status === "ok") {
-    return { text: "OK", className: "live-status__value--ok" };
-  }
-  if (status === "error") {
-    return { text: "Error", className: "live-status__value--error" };
-  }
-  return { text: status || "—", className: "live-status__value--warn" };
-}
-
 function updateFooterBadge(overallStatus) {
   const badge = document.getElementById("footer-health-badge");
   if (!badge) {
@@ -56,11 +46,6 @@ function dispatchStatus(status) {
 
 function setDot(dotEl, status) {
   dotEl.className = `live-status__dot live-status__dot--${statusClass(status)}`;
-}
-
-function setValue(el, { text, className }) {
-  el.textContent = text;
-  el.className = `live-status__value ${className}`;
 }
 
 function initLiveStatusVisibility(rootEl) {
@@ -130,11 +115,8 @@ export function initLiveStatus() {
   const toggleBtn = document.getElementById("live-status-toggle");
   const dotEl = document.getElementById("live-status-dot");
   const labelEl = document.getElementById("live-status-label");
-  const pgEl = document.getElementById("live-status-pg");
-  const redisEl = document.getElementById("live-status-redis");
-  const requestsEl = document.getElementById("live-status-requests");
 
-  if (!rootEl || !toggleBtn || !dotEl || !labelEl || !pgEl || !redisEl || !requestsEl) {
+  if (!rootEl || !toggleBtn || !dotEl || !labelEl) {
     return;
   }
 
@@ -145,42 +127,20 @@ export function initLiveStatus() {
     let overall = "offline";
 
     try {
-      const [healthRes, metricsRes] = await Promise.all([
-        fetch(`${API_BASE}/api/health`),
-        fetch(`${API_BASE}/api/metrics`),
-      ]);
-
+      const healthRes = await fetch(`${API_BASE}/api/health`);
       if (healthRes.ok) {
         const health = await healthRes.json();
         overall = health.status || "degraded";
-
         labelEl.textContent = LABELS[overall] || overall;
         setDot(dotEl, overall);
-
-        const pg = health.checks?.postgres?.status;
-        const redis = health.checks?.redis?.status;
-        setValue(pgEl, formatCheck(pg));
-        setValue(redisEl, formatCheck(redis));
       } else {
         labelEl.textContent = LABELS.offline;
         setDot(dotEl, "error");
-        setValue(pgEl, { text: "—", className: "" });
-        setValue(redisEl, { text: "—", className: "" });
-      }
-
-      if (metricsRes.ok) {
-        const metrics = await metricsRes.json();
-        requestsEl.textContent = String(metrics.total_requests ?? 0);
-        requestsEl.className = "live-status__value";
-      } else {
-        requestsEl.textContent = "—";
+        overall = "offline";
       }
     } catch {
       labelEl.textContent = LABELS.offline;
       setDot(dotEl, "error");
-      pgEl.textContent = "—";
-      redisEl.textContent = "—";
-      requestsEl.textContent = "—";
       overall = "offline";
     }
 

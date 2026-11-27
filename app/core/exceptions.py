@@ -1,7 +1,8 @@
 """Кастомные исключения и глобальные обработчики ошибок."""
 from __future__ import annotations
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request
+from starlette import status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
@@ -35,7 +36,7 @@ class RateLimitExceeded(AppError):
 
 
 class ValidationAppError(AppError):
-    status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
     error_code = "validation_error"
     message = "Request validation failed"
 
@@ -44,6 +45,24 @@ class CaptchaFailed(AppError):
     status_code = status.HTTP_400_BAD_REQUEST
     error_code = "captcha_failed"
     message = "CAPTCHA verification failed"
+
+
+class Unauthorized(AppError):
+    status_code = status.HTTP_401_UNAUTHORIZED
+    error_code = "unauthorized"
+    message = "Authentication required"
+
+
+class IdempotencyConflict(AppError):
+    status_code = status.HTTP_409_CONFLICT
+    error_code = "idempotency_conflict"
+    message = "Idempotency-Key was reused with a different request body"
+
+
+class InvalidIdempotencyKey(AppError):
+    status_code = status.HTTP_400_BAD_REQUEST
+    error_code = "invalid_idempotency_key"
+    message = "Idempotency-Key must be 1-64 characters: letters, digits, '.', '_' or '-'"
 
 
 def _request_id(request: Request) -> str | None:
@@ -99,6 +118,8 @@ def register_exception_handlers(app: FastAPI) -> None:
             if exc.limit is not None:
                 headers["X-RateLimit-Limit"] = str(exc.limit)
                 headers["X-RateLimit-Remaining"] = "0"
+        if isinstance(exc, Unauthorized):
+            headers["WWW-Authenticate"] = "Bearer"
         return _error_response(
             exc.error_code, exc.message, exc.status_code, request, exc.detail, headers
         )
@@ -117,7 +138,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return _error_response(
             "validation_error",
             "Request validation failed",
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             request,
             errors,
         )

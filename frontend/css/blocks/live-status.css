@@ -282,3 +282,11 @@
     animation: none;
   }
 }
+
+.live-status__hint {
+  margin: 0;
+  padding: 0.5rem 0.75rem 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--color-muted, #71717a);
+}

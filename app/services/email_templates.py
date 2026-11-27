@@ -67,7 +67,8 @@ def owner_html(request: ContactRequest, analysis: AIAnalysis) -> str:
 
 def user_plain(request: ContactRequest, analysis: AIAnalysis) -> str:
     return (
-        f"{analysis.auto_reply}\n\n"
+        f"Здравствуйте, {request.name}!\n\n"
+        "Ваше обращение принято. Я свяжусь с вами в ближайшее время.\n\n"
         "── Копия вашего обращения ──\n"
         f"Имя: {request.name}\n"
         f"Телефон: {request.phone}\n"
@@ -88,7 +89,10 @@ def user_html(request: ContactRequest, analysis: AIAnalysis) -> str:
           Обращение принято
         </td></tr>
         <tr><td style="padding:24px;">
-          <p style="margin:0 0 16px;font-size:15px;line-height:1.6;white-space:pre-wrap;">{_esc(analysis.auto_reply)}</p>
+          <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">
+            Здравствуйте, {_esc(request.name)}!<br><br>
+            Ваше обращение принято. Я свяжусь с вами в ближайшее время.
+          </p>
           <p style="margin:0 0 8px;font-size:13px;color:#71717a;text-transform:uppercase;letter-spacing:0.04em;">Копия вашего обращения</p>
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size:14px;line-height:1.6;">
             <tr><td style="padding:4px 0;color:#71717a;width:110px;">Имя</td><td>{_esc(request.name)}</td></tr>

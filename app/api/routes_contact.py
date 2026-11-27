@@ -112,6 +112,16 @@ async def public_config(settings=Depends(get_settings)) -> PublicConfigResponse:
             "description": "Rate limit",
             "content": {"application/json": {"example": _RATE_LIMIT_ERROR_EXAMPLE}},
         },
+        409: {
+            "description": "Idempotency-Key reused with a different body",
+            "content": {"application/json": {"example": {
+                "success": False,
+                "error": "idempotency_conflict",
+                "message": "Idempotency-Key was reused with a different request body",
+                "status": 409,
+                "request_id": "a1b2c3d4e5f6",
+            }}},
+        },
         500: {
             "description": "Internal server error",
             "content": {"application/json": {"example": _INTERNAL_ERROR_EXAMPLE}},

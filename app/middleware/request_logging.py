@@ -15,12 +15,21 @@ logger = get_logger("app.request")
 
 
 def client_ip(request: Request) -> str:
-    """Определяет IP клиента с учётом доверенного обратного прокси."""
     settings = get_settings()
     direct = request.client.host if request.client else "unknown"
+    if not settings.effective_trust_proxy:
+        return direct
+
+    trusted = settings.trusted_proxy_list
+    if trusted and direct not in trusted:
+        return direct
+
+    real_ip = (request.headers.get("x-real-ip") or "").strip()
+    if real_ip:
+        return real_ip[:64]
     forwarded = request.headers.get("x-forwarded-for")
-    if forwarded and direct in settings.trusted_proxy_list:
-        return forwarded.split(",")[0].strip()
+    if forwarded:
+        return forwarded.split(",")[0].strip()[:64]
     return direct
 
 

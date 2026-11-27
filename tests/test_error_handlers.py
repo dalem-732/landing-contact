@@ -113,45 +113,82 @@ def test_production_rejects_wildcard_cors(monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("CORS_ORIGINS", "*")
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@localhost/db")
+    monkeypatch.setenv("TURNSTILE_SECRET_KEY", "ts-secret")
+    monkeypatch.setenv("METRICS_TOKEN", "metrics-token")
     monkeypatch.delenv("RAILWAY_PUBLIC_DOMAIN", raising=False)
     with pytest.raises(ValidationError, match="CORS_ORIGINS"):
         Settings()
 
 
-def test_production_auto_cors_from_railway_domain(monkeypatch):
+def test_production_rejects_wildcard_cors_even_with_railway_domain(monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("CORS_ORIGINS", "*")
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@localhost/db")
+    monkeypatch.setenv("TURNSTILE_SECRET_KEY", "ts-secret")
+    monkeypatch.setenv("METRICS_TOKEN", "metrics-token")
     monkeypatch.setenv("RAILWAY_PUBLIC_DOMAIN", "landing-contact-production.up.railway.app")
-    s = Settings()
-    assert s.cors_origins == "https://landing-contact-production.up.railway.app"
+    with pytest.raises(ValidationError, match="CORS_ORIGINS"):
+        Settings()
 
 
-def test_production_worker_skips_cors_validation(monkeypatch):
+def test_production_worker_skips_web_validation(monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("RAILWAY_SERVICE_NAME", "landing-worker")
     monkeypatch.setenv("CORS_ORIGINS", "*")
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@localhost/db")
     monkeypatch.delenv("RAILWAY_PUBLIC_DOMAIN", raising=False)
+    monkeypatch.delenv("TURNSTILE_SECRET_KEY", raising=False)
+    monkeypatch.delenv("METRICS_TOKEN", raising=False)
     s = Settings()
     assert s.cors_origins == "*"
     assert s.service_role == "worker"
+
+
+def test_production_requires_turnstile(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("CORS_ORIGINS", "https://example.com")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@localhost/db")
+    monkeypatch.setenv("METRICS_TOKEN", "metrics-token")
+    monkeypatch.delenv("TURNSTILE_SECRET_KEY", raising=False)
+    with pytest.raises(ValidationError, match="TURNSTILE_SECRET_KEY"):
+        Settings()
+
+
+def test_production_requires_metrics_token(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("CORS_ORIGINS", "https://example.com")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@localhost/db")
+    monkeypatch.setenv("TURNSTILE_SECRET_KEY", "ts-secret")
+    monkeypatch.delenv("METRICS_TOKEN", raising=False)
+    with pytest.raises(ValidationError, match="METRICS_TOKEN"):
+        Settings()
 
 
 def test_production_requires_database_url(monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("CORS_ORIGINS", "https://example.com")
     monkeypatch.setenv("DATABASE_URL", "")
+    monkeypatch.setenv("TURNSTILE_SECRET_KEY", "ts-secret")
+    monkeypatch.setenv("METRICS_TOKEN", "metrics-token")
     with pytest.raises(ValidationError, match="DATABASE_URL"):
         Settings()
 
 
-def test_docs_disabled_in_production():
-    s = Settings(
+def _prod_kwargs(**overrides):
+    data = dict(
         app_env="production",
         cors_origins="https://example.com",
         database_url="postgresql+asyncpg://u:p@localhost/db",
+        turnstile_secret_key="ts-secret",
+        turnstile_site_key="ts-site",
+        metrics_token="metrics-token",
     )
+    data.update(overrides)
+    return data
+
+
+def test_docs_disabled_in_production():
+    s = Settings(**_prod_kwargs())
     assert s.docs_enabled is False
 
 

@@ -1,7 +1,6 @@
 """Pydantic-схемы формы обратной связи."""
 from __future__ import annotations
 
-import html
 import re
 from datetime import datetime, timezone
 from enum import Enum
@@ -16,7 +15,7 @@ _NAME_RE = re.compile(r"^[A-Za-zА-Яа-яЁё\s\-'.]{2,80}$")
 
 def _sanitize(text: str) -> str:
     cleaned = "".join(ch for ch in text if ch == "\n" or ch >= " ")
-    return html.escape(cleaned.strip())
+    return cleaned.strip()
 
 
 class Sentiment(str, Enum):
@@ -107,7 +106,6 @@ class ContactResponse(BaseModel):
 
 
 class ContactHandleResult(BaseModel):
-    """Внутренний результат обработки с метаданными rate limit."""
     response: ContactResponse
     rate_limit_limit: int
     rate_limit_remaining: int

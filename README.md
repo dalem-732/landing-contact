@@ -6,26 +6,25 @@ AI-анализом обращений (тональность, классифи
 
 Стек: **Python 3.11 + FastAPI + PostgreSQL + Redis**.
 
-**Репозиторий:** после `git push` укажите URL здесь, напр. `https://github.com/<username>/landing-contact`
+**Репозиторий:** https://github.com/dalem-732/landing-contact
 
-**Live demo** (после деплоя через [`render.yaml`](render.yaml) → Render Blueprint):
-- Landing: https://landing-contact.onrender.com/
-- Health: https://landing-contact.onrender.com/api/health
-- Metrics: https://landing-contact.onrender.com/api/metrics
+**После деплоя** (Render Blueprint — [`render.yaml`](render.yaml), либо Railway — [`railway.toml`](railway.toml)):
+- Лендинг и публичный health: `https://<ваш-домен>/` и `https://<ваш-домен>/api/health`
+- Подробный health и метрики закрыты токеном `METRICS_TOKEN`
 
 ---
 
 ## 1. Как запустить проект
 
 ### Требования
-- Python 3.9+ (рекомендуется 3.11)
+- Python 3.11+
 - pip
 - PostgreSQL 15+ (локально) **или** Docker / Docker Compose
 
 ### Установка и запуск (локально)
 ```bash
 # 1. Клонировать репозиторий и перейти в папку
-cd "test task"
+cd landing-contact
 
 # 2. Создать и активировать виртуальное окружение
 python -m venv .venv
@@ -63,9 +62,8 @@ uvicorn app.main:app --reload
 curl -s http://localhost:8000/openapi.json -o openapi.json
 ```
 
-> **Production:** задайте `APP_ENV=production`, явный whitelist в `CORS_ORIGINS`
-> (значение `*` запрещено валидатором), обязательный `DATABASE_URL`.
-> Секреты - через env vars платформы (Render/Railway), `.env` - только для локальной разработки.
+> **Production:** `APP_ENV=production`, явный whitelist в `CORS_ORIGINS` (`*` запрещён),
+> `DATABASE_URL`, `TURNSTILE_SECRET_KEY`, `METRICS_TOKEN`. Секреты — через переменные платформы.
 
 ### Запуск через Docker
 ```bash
@@ -78,6 +76,8 @@ docker run -p 8000:8000 --env-file .env landing-contact
 docker compose up --build
 ```
 
+Порты Postgres, Redis и приложения в Compose привязаны к `127.0.0.1`. У Redis задан пароль `landing-dev` (`REDIS_URL=redis://:landing-dev@redis:6379`).
+
 ### Ограничения файлового rate limit
 - **Один worker** (`uvicorn app.main:app`) — файловый rate limit работает корректно.
 - **Несколько workers** (`--workers N`) или **несколько инстансов** - используйте `REDIS_URL` для shared rate limiting (см. ниже).
@@ -86,21 +86,23 @@ docker compose up --build
 | Переменная | Назначение | По умолчанию |
 |---|---|---|
 | `APP_ENV` | `development`, `staging` или `production` | `development` |
+| `DEBUG` | Поднять уровень логов до DEBUG | `false` |
 | `LOG_FORMAT` | `text` или `json` (structured logging) | `text` |
 | `LOG_LEVEL` | Уровень логирования (`DEBUG`, `INFO`, …) | `INFO` |
-| `TRUSTED_PROXY_IPS` | IP прокси, которым доверяем `X-Forwarded-For` | — |
+| `TRUSTED_PROXY_IPS` | IP прокси, которым доверяем `X-Forwarded-For` / `X-Real-IP` | — |
+| `TRUST_PROXY_HEADERS` | Явно включить/выключить доверие к прокси (`1`/`0`); на Railway и Render включается само | — |
 | `CORS_ORIGINS` | Разрешённые origin через запятую (`*` — все; в production запрещено) | `*` |
 | `CORS_ALLOW_CREDENTIALS` | Разрешить credentials (авто-отключается при `CORS_ORIGINS=*`) | `true` |
-| `RATE_LIMIT_MAX_REQUESTS` | Лимит запросов с одного IP | `5` |
+| `RATE_LIMIT_MAX_REQUESTS` | Лимит запросов с одного IP | `3` |
 | `RATE_LIMIT_WINDOW_SECONDS` | Окно лимита IP (сек) | `60` |
-| `RATE_LIMIT_EMAIL_MAX` | Лимит запросов с одного email | `3` |
+| `RATE_LIMIT_EMAIL_MAX` | Лимит запросов с одного email | `2` |
 | `RATE_LIMIT_EMAIL_WINDOW` | Окно лимита email (сек) | `3600` |
 | `DEFAULT_PHONE_REGION` | Регион парсинга телефона | `RU` |
 | `DATABASE_URL` | PostgreSQL connection string (asyncpg) | см. `.env.example` |
 | `DB_POOL_SIZE` / `DB_ECHO` | Пул соединений / SQL-лог SQLAlchemy | `5` / `false` |
 | `REDIS_URL` | Redis для rate limit + ARQ email queue | — |
-| `RESEND_API_KEY` | Resend HTTP API (приоритет над SMTP) | — |
-| `SMTP_HOST` / `SMTP_PORT` | SMTP fallback (пусто → только лог, если нет Resend) | — / `587` |
+| `RESEND_API_KEY` | Resend HTTP API, пробуется первым | — |
+| `SMTP_HOST` / `SMTP_PORT` | SMTP, если Resend не задан или его вызов не удался (пусто → лог без тела письма) | — / `587` |
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | Учётные данные SMTP | — |
 | `SMTP_USE_TLS` | Использовать STARTTLS | `true` |
 | `SMTP_FROM` | Отправитель (для Resend — verified domain или `onboarding@resend.dev`) | — |
@@ -111,11 +113,13 @@ docker compose up --build
 | `AI_CIRCUIT_COOLDOWN_SECONDS` | Пауза circuit breaker (сек) | `300` |
 | `OPENAI_API_KEY` / `OPENAI_MODEL` | Ключ и модель OpenAI | — / `gpt-4o-mini` |
 | `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` | Ключ и модель Anthropic | — / `claude-haiku-4-5` |
-| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile CAPTCHA | — |
+| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile; в production секрет обязателен | — |
+| `METRICS_TOKEN` | Токен для `GET /api/metrics` и `GET /api/health/details`; в production обязателен | — |
 
-> Сервис работает даже без AI-ключа и без email: включается graceful fallback.
-> Письма: **Resend** (если задан `RESEND_API_KEY`) → иначе **SMTP** → иначе лог.
-> На Railway секреты задавайте в Variables сервиса, не в Git.
+> Без AI-ключа и без email сервис стартует: классификация идёт эвристикой, письма не отправляются (в лог пишутся только адресат и тема, без тела).
+> Письма: **Resend** (если задан `RESEND_API_KEY`) → при ошибке **SMTP** (если задан `SMTP_HOST`) → иначе недоставленное письмо. Временные сбои повторяются до 3 раз.
+> В production обязательны `APP_ENV=production`, явный `CORS_ORIGINS` (не `*`), `DATABASE_URL`, `TURNSTILE_SECRET_KEY` и `METRICS_TOKEN`.
+> На Railway/Render секреты задавайте в Variables сервиса, не в Git. Доверие к `X-Forwarded-For` на этих платформах включается автоматически.
 
 ---
 
@@ -136,7 +140,8 @@ docker compose up --build
 ### Инфраструктура
 - **Логирование:** RotatingFileHandler + stdout, text/json, `LOG_LEVEL`, correlation id
 - **Безопасность:** CORS whitelist, production-валидация Settings, маскирование DATABASE_URL в логах
-- **Observability:** health probes (AI/email/PostgreSQL/Redis), typed OpenAPI schemas, `X-Request-ID`
+- **Observability:** публичный `/api/health`, подробные probes и метрики за `METRICS_TOKEN`, typed OpenAPI, `X-Request-ID`
+- **CI:** GitHub Actions — `pytest` и `pip-audit`; Dependabot для pip, Actions и Docker
 - **Rate limiting:** dual-key (IP + email), Redis или файловый fallback
 - **Idempotency:** заголовок `Idempotency-Key` для дедупликации POST
 
@@ -190,7 +195,7 @@ app/
 **Почему PostgreSQL:** надёжное ACID-хранилище для обращений, idempotency и метрик;
 SQL-агрегации вместо counter-файлов; Alembic для версионирования схемы.
 
-> Подробное обоснование всех ключевых решений - в [разделе 8](#8-архитектурные-решения-и-обоснование).
+> Подробное обоснование всех ключевых решений - в [разделе 7](#7-архитектурные-решения-и-обоснование).
 
 ### Инфраструктурные улучшения (production-ready)
 
@@ -203,7 +208,7 @@ SQL-агрегации вместо counter-файлов; Alembic для вер�
 | **Logging** | Env `LOG_LEVEL`; подавление шума SQLAlchemy при `DB_ECHO=false` |
 | **Тесты** | `tests/test_error_handlers.py` - формат ошибок, CORS, production validation |
 
-Полный цикл запроса: `валидация → rate limit (IP+email) → captcha → idempotency → save → AI → email queue → ответ`.
+Полный цикл запроса: `валидация тела → honeypot → idempotency → rate limit (IP+email) → captcha → save → AI → email queue → ответ`.
 
 Заголовки ответа `POST /api/contact`:
 - `X-RateLimit-Limit`, `X-RateLimit-Remaining` - на успешных ответах
@@ -213,14 +218,16 @@ SQL-агрегации вместо counter-файлов; Alembic для вер�
 
 ```mermaid
 flowchart LR
-  A[POST /api/contact] --> B{Rate limit ok?}
+  A[POST /api/contact] --> V{Валидация Pydantic}
+  V -->|fail| E422[422]
+  V -->|ok| H{Honeypot / idempotency}
+  H --> B{Rate limit ok?}
   B -->|no| E429[429]
-  B -->|yes| C{Валидация Pydantic}
-  C -->|fail| E422[422]
+  B -->|yes| C{Captcha}
+  C -->|fail| E400[400]
   C -->|ok| D[AI-анализ]
-  D --> F[Email владельцу + копия]
-  F --> G[Лог + метрики]
-  G --> R[201 + результат]
+  D --> F[Письмо владельцу + шаблон пользователю]
+  F --> R[201 + результат]
 ```
 
 ---
@@ -266,8 +273,8 @@ Email отправляется асинхронно (BackgroundTasks или ARQ 
 фактический статус пишется в БД (`email_owner_sent` / `email_user_sent`) и
 учитывается в `/api/metrics`.
 
-Клиенту уходит HTML+plain письмо с AI `auto_reply`; владельцу - карточка обращения
-и черновик ответа.
+Клиенту уходит HTML+plain письмо с фиксированным шаблоном подтверждения (без текста модели);
+владельцу — карточка обращения и санитизированный черновик ответа.
 
 **Railway + Resend** (Variables у `landing-contact` и `landing-worker`):
 ```text
@@ -349,31 +356,26 @@ CAPTCHA failed - `400`:
 ```
 
 ### `GET /api/health`
-Статус сервиса и probes: AI, email (Resend/SMTP), PostgreSQL, Redis.
+Публичный liveness: процесс жив, коротко проверяется PostgreSQL. Без флагов конфигурации, без текста ошибок и без SMTP-подключения.
 
-Ответ `200` (ok):
+Ответ `200`:
 ```json
 {
   "status": "ok",
-  "version": "1.0.0",
-  "time": "2026-07-16T12:00:00Z",
-  "ai_provider": "openai",
-  "ai_configured": false,
-  "smtp_configured": false,
-  "email_configured": false,
-  "checks": {
-    "ai": { "status": "ok", "detail": "not configured (fallback mode)" },
-    "smtp": { "status": "ok", "detail": "not configured (fallback mode)" },
-    "postgres": { "status": "ok", "detail": "connection successful" },
-    "redis": { "status": "ok", "detail": "not configured" }
-  }
+  "version": "1.1.0",
+  "time": "2026-07-16T12:00:00Z"
 }
 ```
 
-При недоступности зависимостей - `"status": "degraded"`, проблемный check с `"status": "error"`.
+При недоступности БД - `"status": "degraded"`.
+
+### `GET /api/health/details`
+Подробные probes (AI, email, PostgreSQL, Redis). Требуется `METRICS_TOKEN`
+(`Authorization: Bearer <token>` или заголовок `X-Metrics-Token`).
+Тексты внутренних исключений клиенту не отдаются.
 
 ### `GET /api/metrics`
-Агрегированная статистика из PostgreSQL.
+Агрегированная статистика из PostgreSQL. Требуется тот же `METRICS_TOKEN`.
 
 Ответ `200`:
 ```json
@@ -393,10 +395,10 @@ CAPTCHA failed - `400`:
 ```
 
 ### Валидация и обработка ошибок
-- **Имя:** 2–80 символов, только буквы/пробелы/дефис, HTML-экранирование.
+- **Имя:** 2–80 символов, только буквы/пробелы/дефис.
 - **Email:** формат через `EmailStr`.
 - **Телефон:** парсинг и проверка через `phonenumbers` (нормализация в E.164).
-- **Комментарий:** 5–2000 символов, санитизация от управляющих символов и HTML.
+- **Комментарий:** 5–2000 символов, управляющие символы удаляются; HTML экранируется при выводе (письма), не при сохранении.
 - **Honeypot:** скрытое поле `website` - если заполнено, запрос принимается «тихо» без обработки.
 - Единый формат ошибок через глобальные обработчики в `core/exceptions.py`:
   `{ success, error, message, status, request_id?, detail? }`.
@@ -427,14 +429,15 @@ curl -X POST http://localhost:8000/api/contact \
   - `SYSTEM_PROMPT` - задаёт роль и требование вернуть строгий JSON.
   - `USER_PROMPT_TEMPLATE` - подставляет имя/email/комментарий и описывает поля ответа.
 
-**Как проверить, что AI реально работает** (не fallback):
+**Как проверить, что AI реально работает** (не fallback) — на своём стенде, не на чужом демо:
 ```bash
-curl -s -X POST https://landing-contact.onrender.com/api/contact \
+curl -s -X POST http://localhost:8000/api/contact \
   -H "Content-Type: application/json" \
   -d '{"name":"Test","email":"test@example.com","phone":"+79991234567","comment":"Хочу обсудить разработку API"}' \
   | jq '.analysis | {ai_used, provider, summary}'
 ```
 Ожидается: `"ai_used": true`, `"provider": "openai"` (или `anthropic`), `summary` - короткое резюме, не дословный комментарий.
+`auto_reply` в ответе API санитизируется (без HTML и ссылок) и не подставляется в письмо пользователю.
 
 Если `ai_used: false` - проверьте `OPENAI_API_KEY` (баланс/квота) и `/api/health` (`checks.ai.detail`: `circuit open` → перезапуск или ожидание cooldown).
 
@@ -504,7 +507,7 @@ flowchart LR
 |---|---|---|
 | Форма обратной связи | `POST /api/contact` | отправка обращения, отображение результата |
 | Turnstile | `GET /api/config/public` | публичный site key (если включён) |
-| Live-status panel | `GET /api/health`, `GET /api/metrics` | PostgreSQL/Redis/статус, счётчик обращений |
+| Live-status panel | `GET /api/health` | Публичный статус сервиса |
 | Footer badge | `GET /api/health` | индикатор degraded/offline |
 
 ### UX
@@ -544,6 +547,7 @@ flowchart LR
 | **Dual-key rate limit** (IP + email) | Только IP | IP легко сменить (VPN); email привязан к реальному пользователю - защита от спама с одного адреса с разных IP |
 | **Idempotency-Key** | Повторная обработка дубликатов | Клиент может безопасно retry POST при сетевом сбое; ответ кешируется в PG на 24h |
 | **Circuit breaker для AI** | Бесконечные retry | При падении OpenAI/Anthropic сервис не «висит» на таймаутах; быстрый fallback, счётчик в `app_stats` |
+| **METRICS_TOKEN** | Открытые `/metrics` | Служебные эндпоинты не торчат без секрета |
 | **Graceful degradation** (AI, SMTP, Redis) | Fail-fast при отсутствии ключей | Форма работает на демо без секретов: эвристический AI, email в лог, file rate limit - сервис не падает |
 | **Turnstile** (опционально) | reCAPTCHA, hCaptcha | Бесплатный tier, privacy-friendly, простая интеграция; при пустом `TURNSTILE_SECRET_KEY` - captcha отключена |
 | **Honeypot-поле** | Только captcha | Ловит простых ботов без UX-фрикции для пользователя |
@@ -560,6 +564,10 @@ flowchart LR
 
 ### Observability и документация
 
+CI (`.github/workflows/ci.yml`) запускает `pytest` и `pip-audit` на каждом PR. Dependabot обновляет Python, Actions и Docker-образ.
+
+### Observability и документация (детали)
+
 | Решение | Альтернативы | Почему выбрано |
 |---|---|---|
 | **Файл + stdout logging** | Только stdout, ELK сразу | Файл - удобно локально; stdout - Docker-friendly; `LOG_FORMAT=json` + `request_id` - готовность к centralized logging без переписывания |
@@ -570,6 +578,6 @@ flowchart LR
 
 - **RFC 7807 Problem Details** - overkill; единый JSON-формат ошибок проще для фронтенда.
 - **Separate access/app log files** - отложено; один `app.log` достаточен для demo, stdout покрывает Docker.
-- **JWT/auth на `/metrics`** - эндпоинт служебный; в prod закрывается на уровне reverse proxy / internal network.
+- Публичный разбор всех внутренних логов и дашбордов — достаточно токена на `/api/metrics` и `/api/health/details`.
 
 ---

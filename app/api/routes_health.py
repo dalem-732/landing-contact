@@ -1,65 +1,46 @@
-"""Health-check эндпоинт с probes."""
+"""Health-check эндпоинты: публичный liveness и подробный probe."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from app import __version__
+from app.core.auth import require_metrics_token
 from app.dependencies import get_health_service, get_settings
-from app.schemas.system import HealthCheckDetail, HealthResponse
+from app.schemas.system import HealthCheckDetail, HealthResponse, PublicHealthResponse
 from app.services.health_service import HealthService
 
 router = APIRouter()
 
-_HEALTH_OK_EXAMPLE = {
-    "status": "ok",
-    "version": "1.0.0",
-    "time": "2026-07-16T12:00:00Z",
-    "ai_provider": "openai",
-    "ai_configured": False,
-    "smtp_configured": False,
-    "email_configured": False,
-    "checks": {
-        "ai": {"status": "ok", "detail": "not configured (fallback mode)"},
-        "smtp": {"status": "ok", "detail": "not configured (fallback mode)"},
-        "postgres": {"status": "ok", "detail": "connection successful"},
-        "redis": {"status": "ok", "detail": "not configured"},
-    },
-}
-
-_HEALTH_DEGRADED_EXAMPLE = {
-    **_HEALTH_OK_EXAMPLE,
-    "status": "degraded",
-    "checks": {
-        **_HEALTH_OK_EXAMPLE["checks"],
-        "smtp": {"status": "error", "detail": "connection refused"},
-    },
-}
-
 
 @router.get(
     "/health",
-    response_model=HealthResponse,
-    summary="Статус сервиса",
-    responses={
-        200: {
-            "description": "Сервис работает",
-            "content": {
-                "application/json": {
-                    "examples": {
-                        "ok": {"value": _HEALTH_OK_EXAMPLE},
-                        "degraded": {"value": _HEALTH_DEGRADED_EXAMPLE},
-                    }
-                }
-            },
-        }
-    },
+    response_model=PublicHealthResponse,
+    summary="Публичный статус сервиса",
 )
 async def health(
     health_svc: HealthService = Depends(get_health_service),
+) -> PublicHealthResponse:
+    status = await health_svc.public_status()
+    return PublicHealthResponse(
+        status=status,
+        version=__version__,
+        time=datetime.now(timezone.utc),
+    )
+
+
+@router.get(
+    "/health/details",
+    response_model=HealthResponse,
+    summary="Подробные health probes (требуется METRICS_TOKEN)",
+)
+async def health_details(
+    request: Request,
+    health_svc: HealthService = Depends(get_health_service),
     settings=Depends(get_settings),
 ) -> HealthResponse:
+    require_metrics_token(request, settings)
     probe = await health_svc.run_checks()
     checks = {
         name: HealthCheckDetail(**data)

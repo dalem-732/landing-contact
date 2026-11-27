@@ -125,12 +125,19 @@ export function initContactForm() {
   async function showFeedback(type, title, detail) {
     feedbackEl.hidden = false;
     feedbackEl.className = `feedback feedback--${type}`;
+    feedbackEl.replaceChildren();
 
-    let html = `<strong class="feedback__title">${title}</strong>`;
+    const titleEl = document.createElement("strong");
+    titleEl.className = "feedback__title";
+    titleEl.textContent = title;
+    feedbackEl.appendChild(titleEl);
+
     if (detail) {
-      html += `<pre class="feedback__detail">${detail}</pre>`;
+      const detailEl = document.createElement("pre");
+      detailEl.className = "feedback__detail";
+      detailEl.textContent = detail;
+      feedbackEl.appendChild(detailEl);
     }
-    feedbackEl.innerHTML = html;
     await animateFeedback(feedbackEl);
   }
 

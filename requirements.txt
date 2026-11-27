@@ -1,8 +1,9 @@
-fastapi==0.115.6
-uvicorn[standard]==0.34.0
-pydantic==2.10.4
-pydantic-settings==2.7.1
-python-dotenv==1.0.1
+fastapi==0.165.0
+starlette==1.10.0
+uvicorn[standard]==0.38.0
+pydantic==2.12.5
+pydantic-settings==2.16.3
+python-dotenv==1.2.4
 email-validator==2.2.0
 phonenumbers==8.13.52
 httpx==0.28.1
@@ -13,8 +14,3 @@ arq==0.26.1
 sqlalchemy[asyncio]==2.0.36
 asyncpg==0.30.0
 alembic==1.14.0
-
-# dev / tests
-pytest==8.3.4
-pytest-asyncio==0.25.2
-aiosqlite==0.20.0

@@ -58,10 +58,60 @@ def test_idempotency_returns_cached(client):
     assert r1.json()["request_id"] == r2.json()["request_id"]
 
 
-def test_health_extended(client):
+def test_public_health_is_minimal(client):
     r = client.get("/api/health")
     assert r.status_code == 200
     body = r.json()
     assert body["status"] in ("ok", "degraded")
-    assert "checks" in body
-    assert "postgres" in body["checks"]
+    assert "version" in body
+    assert "checks" not in body
+    assert "ai_provider" not in body
+    assert "ai_configured" not in body
+
+
+def test_idempotency_conflict_on_different_body(client):
+    key = "test-idempotency-key-002"
+    headers = {"Idempotency-Key": key}
+    r1 = client.post("/api/contact", json=VALID, headers=headers)
+    r2 = client.post(
+        "/api/contact",
+        json={**VALID, "comment": "Другое сообщение для проверки конфликта"},
+        headers=headers,
+    )
+    assert r1.status_code == 201
+    assert r2.status_code == 409
+    assert r2.json()["error"] == "idempotency_conflict"
+
+
+def test_invalid_idempotency_key(client):
+    r = client.post(
+        "/api/contact",
+        json=VALID,
+        headers={"Idempotency-Key": "bad key with spaces and /slash"},
+    )
+    assert r.status_code == 400
+    assert r.json()["error"] == "invalid_idempotency_key"
+
+
+def test_overlong_idempotency_key_rejected(client):
+    r = client.post(
+        "/api/contact",
+        json=VALID,
+        headers={"Idempotency-Key": "K" * 65},
+    )
+    assert r.status_code == 400
+    assert r.json()["error"] == "invalid_idempotency_key"
+
+
+def test_security_headers_present(client):
+    r = client.get("/")
+    assert r.status_code == 200
+    assert r.headers.get("X-Frame-Options") == "DENY"
+    assert r.headers.get("X-Content-Type-Options") == "nosniff"
+    assert "Content-Security-Policy" in r.headers
+
+
+def test_metrics_open_without_token_in_development(client):
+    r = client.get("/api/metrics")
+    assert r.status_code == 200
+    assert "total_requests" in r.json()
