@@ -4,6 +4,7 @@ from __future__ import annotations
 import html
 
 from app.schemas.contact import AIAnalysis, ContactRequest
+from app.services.ai_service import sanitize_auto_reply
 
 
 def _esc(value: str) -> str:
@@ -65,10 +66,24 @@ def owner_html(request: ContactRequest, analysis: AIAnalysis) -> str:
 """
 
 
-def user_plain(request: ContactRequest, analysis: AIAnalysis) -> str:
+def applicant_reply_paragraph(analysis: AIAnalysis, *, include_auto_reply: bool = True) -> str:
+    if include_auto_reply and analysis.ai_used:
+        cleaned = sanitize_auto_reply(analysis.auto_reply, fallback="")
+        if cleaned:
+            return cleaned
+    return "Ваше обращение принято. Я свяжусь с вами в ближайшее время."
+
+
+def user_plain(
+    request: ContactRequest,
+    analysis: AIAnalysis,
+    *,
+    include_auto_reply: bool = True,
+) -> str:
+    paragraph = applicant_reply_paragraph(analysis, include_auto_reply=include_auto_reply)
     return (
         f"Здравствуйте, {request.name}!\n\n"
-        "Ваше обращение принято. Я свяжусь с вами в ближайшее время.\n\n"
+        f"{paragraph}\n\n"
         "── Копия вашего обращения ──\n"
         f"Имя: {request.name}\n"
         f"Телефон: {request.phone}\n"
@@ -77,7 +92,13 @@ def user_plain(request: ContactRequest, analysis: AIAnalysis) -> str:
     )
 
 
-def user_html(request: ContactRequest, analysis: AIAnalysis) -> str:
+def user_html(
+    request: ContactRequest,
+    analysis: AIAnalysis,
+    *,
+    include_auto_reply: bool = True,
+) -> str:
+    paragraph = applicant_reply_paragraph(analysis, include_auto_reply=include_auto_reply)
     return f"""\
 <!DOCTYPE html>
 <html lang="ru">
@@ -91,7 +112,7 @@ def user_html(request: ContactRequest, analysis: AIAnalysis) -> str:
         <tr><td style="padding:24px;">
           <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">
             Здравствуйте, {_esc(request.name)}!<br><br>
-            Ваше обращение принято. Я свяжусь с вами в ближайшее время.
+            {_esc(paragraph)}
           </p>
           <p style="margin:0 0 8px;font-size:13px;color:#71717a;text-transform:uppercase;letter-spacing:0.04em;">Копия вашего обращения</p>
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size:14px;line-height:1.6;">
