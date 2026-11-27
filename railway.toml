@@ -12,3 +12,17 @@ dockerfilePath = "Dockerfile"
 [deploy]
 # Без healthcheckPath — один railway.toml на web и worker; worker (arq) не отдаёт HTTP.
 restartPolicyType = "ON_FAILURE"
+
+# Production web service variables (set also in the dashboard if this section is ignored):
+#   APP_ENV=production
+#   DEBUG=false
+#   LOG_FORMAT=json
+#   CORS_ORIGINS=https://your-frontend.netlify.app
+#   METRICS_TOKEN=<secret>
+#   TURNSTILE_SITE_KEY / TURNSTILE_SECRET_KEY
+# TRUST_PROXY_HEADERS is auto-enabled on Railway.
+
+[variables]
+APP_ENV = "production"
+DEBUG = "false"
+LOG_FORMAT = "json"

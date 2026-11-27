@@ -34,10 +34,12 @@ def test_short_name():
                        phone="+7 999 123-45-67", comment="Привет мир")
 
 
-def test_comment_html_sanitized():
+def test_comment_strips_controls_but_keeps_tags():
     req = ContactRequest(
         name="Иван", email="ivan@example.com", phone="+7 999 123-45-67",
-        comment="<script>alert('x')</script> обычный текст",
+        comment="<script>alert('x')</script> обычный текст" + chr(7),
     )
-    assert "<script>" not in req.comment
-    assert "&lt;script&gt;" in req.comment
+    assert "<script>" in req.comment
+    assert "&lt;script&gt;" not in req.comment
+    assert chr(7) not in req.comment
+    assert "обычный текст" in req.comment

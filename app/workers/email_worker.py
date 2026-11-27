@@ -48,13 +48,13 @@ def _build_redis_settings() -> RedisSettings:
 
 
 def create_worker_settings():
-    """Собирает WorkerSettings после inject env (Railway делает это при старте процесса)."""
     return type(
         "WorkerSettings",
         (),
         {
             "functions": [send_contact_emails],
             "redis_settings": _build_redis_settings(),
+            "max_tries": 3,
         },
     )
 
