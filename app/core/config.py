@@ -136,6 +136,7 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-haiku-4-5"
+    auto_reply_to_applicant: bool = True
 
     turnstile_site_key: str | None = None
     turnstile_secret_key: str | None = None

@@ -205,7 +205,10 @@ export function initContactForm() {
         const analysis = data.analysis;
         let detail = "";
         if (analysis) {
-          detail = `Тональность: ${analysis.sentiment}\nКатегория: ${analysis.category}\nОтвет: ${analysis.auto_reply}`;
+          detail = `Тональность: ${analysis.sentiment}\nКатегория: ${analysis.category}`;
+          if (analysis.auto_reply) {
+            detail += `\nОтвет: ${analysis.auto_reply}`;
+          }
         }
         if (data.email_queued) {
           detail += detail

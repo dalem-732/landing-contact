@@ -113,6 +113,7 @@ docker compose up --build
 | `AI_CIRCUIT_COOLDOWN_SECONDS` | Пауза circuit breaker (сек) | `300` |
 | `OPENAI_API_KEY` / `OPENAI_MODEL` | Ключ и модель OpenAI | — / `gpt-4o-mini` |
 | `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` | Ключ и модель Anthropic | — / `claude-haiku-4-5` |
+| `AUTO_REPLY_TO_APPLICANT` | Вставлять санитизированный ответ модели в письмо заявителю | `true` |
 | `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile; в production секрет обязателен | — |
 | `METRICS_TOKEN` | Токен для `GET /api/metrics` и `GET /api/health/details`; в production обязателен | — |
 
@@ -226,7 +227,7 @@ flowchart LR
   B -->|yes| C{Captcha}
   C -->|fail| E400[400]
   C -->|ok| D[AI-анализ]
-  D --> F[Письмо владельцу + шаблон пользователю]
+  D --> F[Письмо владельцу + шаблон заявителю с безопасным автоответом]
   F --> R[201 + результат]
 ```
 
@@ -273,8 +274,7 @@ Email отправляется асинхронно (BackgroundTasks или ARQ 
 фактический статус пишется в БД (`email_owner_sent` / `email_user_sent`) и
 учитывается в `/api/metrics`.
 
-Клиенту уходит HTML+plain письмо с фиксированным шаблоном подтверждения (без текста модели);
-владельцу — карточка обращения и санитизированный черновик ответа.
+Заявителю уходит HTML+plain письмо: приветствие, санитизированный абзац модели (без HTML, ссылок, email и телефонов, не длиннее 500 символов) и фиксированный футер. Если модель недоступна, сработал fallback, санитизация очистила текст или `AUTO_REPLY_TO_APPLICANT=false` — вместо абзаца модели подставляется шаблонное подтверждение. Письмо уходит только после прошедших Turnstile (в production обязателен) и лимитов. Владельцу — карточка обращения и черновик ответа.
 
 **Railway + Resend** (Variables у `landing-contact` и `landing-worker`):
 ```text
@@ -437,7 +437,7 @@ curl -s -X POST http://localhost:8000/api/contact \
   | jq '.analysis | {ai_used, provider, summary}'
 ```
 Ожидается: `"ai_used": true`, `"provider": "openai"` (или `anthropic`), `summary` - короткое резюме, не дословный комментарий.
-`auto_reply` в ответе API санитизируется (без HTML и ссылок) и не подставляется в письмо пользователю.
+`auto_reply` в ответе API и в письме заявителю санитизируется (без HTML, ссылок, адресов и телефонов, до 500 символов) и вставляется в шаблон. На фронтенде текст выводится через `textContent`.
 
 Если `ai_used: false` - проверьте `OPENAI_API_KEY` (баланс/квота) и `/api/health` (`checks.ai.detail`: `circuit open` → перезапуск или ожидание cooldown).
 
