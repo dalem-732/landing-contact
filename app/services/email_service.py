@@ -205,8 +205,9 @@ class EmailService:
         msg["Subject"] = "Ваше обращение принято"
         msg["From"] = self.settings.smtp_from
         msg["To"] = str(request.email)
-        plain = email_templates.user_plain(request, analysis)
-        html_body = email_templates.user_html(request, analysis)
+        include = self.settings.auto_reply_to_applicant
+        plain = email_templates.user_plain(request, analysis, include_auto_reply=include)
+        html_body = email_templates.user_html(request, analysis, include_auto_reply=include)
         msg.set_content(plain)
         msg.add_alternative(html_body, subtype="html")
         return msg

@@ -33,14 +33,36 @@ _PROJECT_WORDS = {"проект", "сайт", "приложение", "разр�
 _COLLAB_WORDS = {"сотрудничество", "партн", "collaborat", "partnership"}
 
 _TAG_RE = re.compile(r"<[^>]*>")
-_URL_RE = re.compile(r"(https?://|www\.)\S+", re.IGNORECASE)
+_MARKDOWN_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]+\)")
+_URL_RE = re.compile(
+    r"(?i)(?:(?:https?|ftp|javascript|data):[^\s]+|//[^\s]+|"
+    r"\bwww\.[^\s]+|"
+    r"\b(?:[a-z0-9-]+\.)+(?:com|net|org|ru|io|dev|info|xyz|app|site|link|co|cc|me|to|tv|top|online|shop|biz|pro)"
+    r"(?:/[^\s]*)?)"
+)
+_EMAIL_RE = re.compile(r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b")
+_CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_PHONE_RE = re.compile(r"(?<!\w)(?:\+?\d[\d\s().\-]{5,}\d)")
 _DEFAULT_REPLY = "Спасибо за обращение, мы скоро свяжемся с вами."
+MAX_AUTO_REPLY = 500
+
+
+def _strip_phones(text: str) -> str:
+    def _repl(match: re.Match[str]) -> str:
+        digits = re.sub(r"\D", "", match.group(0))
+        return "" if len(digits) >= 7 else match.group(0)
+
+    return _PHONE_RE.sub(_repl, text)
 
 
 def sanitize_auto_reply(text: str, fallback: str = _DEFAULT_REPLY) -> str:
     cleaned = _TAG_RE.sub("", text or "")
+    cleaned = _MARKDOWN_LINK_RE.sub(r"\1", cleaned)
     cleaned = _URL_RE.sub("", cleaned)
-    cleaned = " ".join(cleaned.split()).strip()[:400]
+    cleaned = _EMAIL_RE.sub("", cleaned)
+    cleaned = _strip_phones(cleaned)
+    cleaned = _CTRL_RE.sub("", cleaned)
+    cleaned = " ".join(cleaned.split()).strip()[:MAX_AUTO_REPLY]
     return cleaned or fallback
 
 
@@ -131,12 +153,11 @@ class AIService:
         return json.loads(raw)
 
     def _build(self, data: dict, *, ai_used: bool, provider: str | None, request: ContactRequest) -> AIAnalysis:
-        fallback = _fallback_reply(request.name)
         return AIAnalysis(
             sentiment=self._coerce(data.get("sentiment"), Sentiment, Sentiment.neutral),
             category=self._coerce(data.get("category"), RequestCategory, RequestCategory.other),
             summary=(data.get("summary") or "").strip()[:300] or "Без резюме",
-            auto_reply=sanitize_auto_reply(data.get("auto_reply") or "", fallback),
+            auto_reply=sanitize_auto_reply(data.get("auto_reply") or "", fallback=""),
             ai_used=ai_used,
             provider=provider,
         )
