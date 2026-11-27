@@ -57,16 +57,61 @@ def _analysis(**overrides) -> AIAnalysis:
     return AIAnalysis(**data)
 
 
-def test_user_templates_use_fixed_copy():
+def test_user_templates_include_sanitized_ai_reply():
     req = _request()
     analysis = _analysis()
     plain = email_templates.user_plain(req, analysis)
     html = email_templates.user_html(req, analysis)
+    assert analysis.auto_reply in plain
+    assert "Обсудим API" in html
+    assert f"Здравствуйте, {req.name}!" in plain
+    assert "Это автоматическое уведомление" in plain
+    assert req.comment in plain
+    assert "Обращение принято" in html
+
+
+def test_user_templates_plain_when_flag_off():
+    req = _request()
+    analysis = _analysis()
+    plain = email_templates.user_plain(req, analysis, include_auto_reply=False)
+    html = email_templates.user_html(req, analysis, include_auto_reply=False)
     assert analysis.auto_reply not in plain
     assert "Обсудим API" not in html
     assert "Ваше обращение принято" in plain
-    assert req.comment in plain
-    assert "Обращение принято" in html
+    assert "Ваше обращение принято" in html
+
+
+def test_user_templates_plain_when_ai_fallback():
+    req = _request()
+    analysis = _analysis(ai_used=False, provider=None, auto_reply="Здравствуйте, Иван! Обсудим API на этой неделе.")
+    plain = email_templates.user_plain(req, analysis)
+    html = email_templates.user_html(req, analysis)
+    assert "Обсудим API" not in plain
+    assert "Обсудим API" not in html
+    assert "Ваше обращение принято" in plain
+
+
+def test_user_templates_plain_when_sanitize_empties_reply():
+    req = _request()
+    analysis = _analysis(
+        auto_reply='<a href="https://evil.test">https://evil.test</a> attacker@evil.test +7 999 123-45-67'
+    )
+    plain = email_templates.user_plain(req, analysis)
+    html = email_templates.user_html(req, analysis)
+    assert "evil.test" not in plain
+    assert "attacker@" not in plain
+    assert "999 123" not in plain
+    assert "Ваше обращение принято" in plain
+    assert "Ваше обращение принято" in html
+
+
+def test_user_html_escapes_auto_reply():
+    req = _request()
+    analysis = _analysis(auto_reply="Спасибо & пока <b>жирный</b>")
+    html = email_templates.user_html(req, analysis)
+    assert "<b>жирный</b>" not in html
+    assert "Спасибо &amp; пока" in html
+    assert "жирный" in html
 
 
 def test_owner_templates_include_analysis():
@@ -83,11 +128,29 @@ def test_owner_templates_include_analysis():
 def test_build_user_email_is_multipart_html():
     settings = Settings(smtp_from="Bot <onboarding@resend.dev>", owner_email="owner@example.com")
     svc = EmailService(settings)
-    msg = svc._build_user_email(_request(), _analysis())
+    analysis = _analysis()
+    msg = svc._build_user_email(_request(), analysis)
     assert msg.is_multipart()
     plain, html = svc._extract_bodies(msg)
-    assert "Ваше обращение принято" in plain
+    assert analysis.auto_reply in plain
+    assert "Обсудим API" in plain
     assert html and "Обращение принято" in html
+    assert "Обсудим API" in html
+
+
+def test_build_user_email_flag_off_uses_template():
+    settings = Settings(
+        smtp_from="Bot <onboarding@resend.dev>",
+        owner_email="owner@example.com",
+        auto_reply_to_applicant=False,
+    )
+    svc = EmailService(settings)
+    analysis = _analysis()
+    msg = svc._build_user_email(_request(), analysis)
+    plain, html = svc._extract_bodies(msg)
+    assert analysis.auto_reply not in plain
+    assert "Ваше обращение принято" in plain
+    assert html and "Обсудим API" not in html
 
 
 def test_send_logs_when_email_not_configured():
@@ -141,10 +204,11 @@ def test_send_via_resend(monkeypatch):
     assert any(c["json"]["to"] == ["ivan@example.com"] for c in captured)
     assert any(c["json"]["to"] == ["owner@example.com"] for c in captured)
     user_payload = next(c["json"] for c in captured if c["json"]["to"] == ["ivan@example.com"])
-    assert "Обсудим API" not in user_payload["text"]
-    assert "Ваше обращение принято" in user_payload["text"]
+    assert "Обсудим API" in user_payload["text"]
+    assert "Здравствуйте, Иван Петров!" in user_payload["text"]
     assert "html" in user_payload
     assert "Обращение принято" in user_payload["html"]
+    assert "Обсудим API" in user_payload["html"]
 
 
 def test_send_via_smtp_when_resend_missing(monkeypatch):
